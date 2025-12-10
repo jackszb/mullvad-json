@@ -30,22 +30,23 @@ jobs:
             | sort -u \
             > tmp/domain_list.txt
 
-      - name: Build JSON (compatible with all jq versions)
+      - name: Build JSON via jq --rawfile (最稳定做法)
         run: |
-          # 将文本转换为数组：用换行 split 成数组
-          domains_json=$(jq -Rs 'split("\n") | map(select(length > 0))' tmp/domain_list.txt)
-
-          # 写入最终 JSON
-          jq -n \
-            --argjson domains "$domains_json" \
-            '{
+          # 使用 --rawfile 将整个文件读取为字符串
+          jq -n --rawfile raw tmp/domain_list.txt '
+            {
               version: 3,
               rules: [
                 {
-                  domain: $domains
+                  domain: (
+                    $raw
+                    | split("\n")
+                    | map(select(length > 0))
+                  )
                 }
               ]
-            }' > mullvad.json
+            }
+          ' > mullvad.json
 
       - name: Commit and Push
         run: |
