@@ -2,8 +2,8 @@ name: Update Mullvad Adblock Domains
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # 每天 00:00 UTC 自动更新
-  workflow_dispatch:       # 手动触发支持
+    - cron: "0 0 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,11 +16,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install jq
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-
       - name: Download adblock list
         run: |
           curl -fsSL "https://raw.githubusercontent.com/jackszb/mullvad-to-adguard/main/adguard/all/adblock.txt" -o adblock.txt
@@ -28,10 +23,6 @@ jobs:
       - name: Extract domains
         run: |
           mkdir -p tmp
-          
-          # 只提取以 ||domain^ 开头的规则
-          # 去掉前缀 "||" 和后缀 "^"
-          # 删除空行和重复
           grep '^||' adblock.txt \
             | sed 's/^||//' \
             | sed 's/\^$//' \
@@ -39,11 +30,14 @@ jobs:
             | sort -u \
             > tmp/domain_list.txt
 
-      - name: Generate JSON
+      - name: Build JSON (compatible with all jq versions)
         run: |
-          # 构建 JSON 文件
+          # 将文本转换为数组：用换行 split 成数组
+          domains_json=$(jq -Rs 'split("\n") | map(select(length > 0))' tmp/domain_list.txt)
+
+          # 写入最终 JSON
           jq -n \
-            --argfile domains tmp/domain_list.txt \
+            --argjson domains "$domains_json" \
             '{
               version: 3,
               rules: [
@@ -59,7 +53,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           git add mullvad.json
-          
+
           if git diff --cached --quiet; then
             echo "No changes detected."
           else
